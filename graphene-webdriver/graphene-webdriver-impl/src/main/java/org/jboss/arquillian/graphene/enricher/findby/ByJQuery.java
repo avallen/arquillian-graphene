@@ -21,14 +21,11 @@
  */
 package org.jboss.arquillian.graphene.enricher.findby;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import org.jboss.arquillian.graphene.context.GrapheneContext;
-import org.jboss.arquillian.graphene.context.GraphenePageExtensionsContext;
-import org.jboss.arquillian.graphene.page.extension.JQueryPageExtension;
+import org.jboss.arquillian.graphene.javascript.JSInterfaceFactory;
+import org.jboss.arquillian.graphene.jquery.JQuerySearchContext;
 import org.openqa.selenium.By;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.NoSuchElementException;
@@ -44,10 +41,12 @@ public class ByJQuery extends By {
 
     private String jquerySelector;
 
-    private JavascriptExecutor executor = GrapheneContext.getProxyForInterfaces(JavascriptExecutor.class);
+    private final JavascriptExecutor executor = GrapheneContext.getProxyForInterfaces(JavascriptExecutor.class);
+
+    private final JQuerySearchContext jQuerySearchContext = JSInterfaceFactory.create(JQuerySearchContext.class);
 
     public ByJQuery(String jquerySelector) {
-        this.jquerySelector = jquerySelector.replaceAll("\\\"", "\\\\\"");
+        this.jquerySelector = jquerySelector;//jquerySelector.replaceAll("\\\"", "\\\\\"");
     }
 
     public static ByJQuery jquerySelector(String selector) {
@@ -65,22 +64,15 @@ public class ByJQuery extends By {
     @SuppressWarnings("unchecked")
     @Override
     public List<WebElement> findElements(SearchContext context) {
-        installJQueryExtension();
-
-        List<WebElement> elements = new ArrayList<WebElement>();
+        List<WebElement> elements;
         try {
             // the element is referenced from parent web element
             if (context instanceof WebElement) {
-                elements = (List<WebElement>) executor.executeScript("return Graphene.jQuery(\"" + jquerySelector
-                    + "\", arguments[0]).get()", (WebElement) context);
+                elements = jQuerySearchContext.findElementsInElement(jquerySelector, (WebElement) context);
             } else if (context instanceof WebDriver) { // element is not referenced from parent
-                elements = (List<WebElement>) executor
-                    .executeScript("return Graphene.jQuery(\"" + jquerySelector + "\").get()");
+                elements = jQuerySearchContext.findElements(jquerySelector);
             } else { // other unknown case
-                Logger
-                    .getLogger(this.getClass().getName())
-                    .log(
-                        Level.SEVERE,
+                throw new WebDriverException(
                         "Cannot determine the SearchContext you are passing to the findBy/s method! It is not instance of WebDriver nor WebElement! It is: "
                             + context);
             }
@@ -93,18 +85,11 @@ public class ByJQuery extends By {
 
     @Override
     public WebElement findElement(SearchContext context) {
-        installJQueryExtension();
-
         List<WebElement> elements = findElements(context);
-        if (elements == null || elements.size() == 0) {
+        if (elements == null || elements.isEmpty()) {
             throw new NoSuchElementException("Cannot locate element using: " + jquerySelector);
         }
         return elements.get(0);
     }
 
-    private void installJQueryExtension() {
-        JQueryPageExtension pageExtension = new JQueryPageExtension();
-        GraphenePageExtensionsContext.getRegistryProxy().register(pageExtension);
-        GraphenePageExtensionsContext.getInstallatorProviderProxy().installator(pageExtension.getName()).install();
-    }
 }
